@@ -127,8 +127,9 @@ def run_SVM(word2vec_src):
   """
   print("# word2vec:", word2vec_src)
   #clf = svm.SVC(kernel="rbf", gamma=0.005)
-  clf = neighbors.KNeighborsClassifier(n_neighbors = 4)
-  #clf = KMeans(n_clusters = 8)
+  #clf = neighbors.KNeighborsClassifier(n_neighbors = 4)
+  clf = KMeans(n_clusters=4, init='k-means++', max_iter=100, n_init=1)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
   train_pd = load_vec(data, data.train_data, use_pkl=False)
@@ -137,21 +138,23 @@ def run_SVM(word2vec_src):
   train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
   test_X = test_pd.loc[:, "Output"].tolist()
   test_Y = test_pd.loc[:, "LinkTypeId"].tolist()
-  #print("before train")
   clf.fit(train_X, train_Y)
-  #print("after train")
   predicted = clf.predict(test_X)
-  #print("predict")
-  #print(predicted)
-  print(metrics.classification_report(test_Y, predicted,
-                                      labels=["1", "2", "3", "4"],
-                                      # target_names=["Duplicates", "DirectLink",
-                                      #               "IndirectLink",
-                                      #               "Isolated"],
-                                      digits=3))
-  #print("print classification data")
-  cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
-  print("accuracy  ", get_acc(cm))
+  print("Homogeneity: %0.3f" % metrics.homogeneity_score(train_Y, clf.labels_))
+  print("Completeness: %0.3f" % metrics.completeness_score(train_Y, clf.labels_))
+  print("V-measure: %0.3f" % metrics.v_measure_score(train_Y, clf.labels_))
+  print("Adjusted Rand-Index: %.3f"
+        % metrics.adjusted_rand_score(train_Y, clf.labels_))
+  print("Silhouette Coefficient: %0.3f"
+        % metrics.silhouette_score(train_X, clf.labels_, sample_size=1000))
+  # print(metrics.classification_report(test_Y, predicted,
+  #                                     labels=["1", "2", "3", "4"],
+  #                                     # target_names=["Duplicates", "DirectLink",
+  #                                     #               "IndirectLink",
+  #                                     #               "Isolated"],
+  #                                     digits=3))
+  # cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
+  # print("accuracy  ", get_acc(cm))
 
 
 def prepare_word2vec():
