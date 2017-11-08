@@ -5,7 +5,8 @@ from sklearn.svm import SVC
 from newabcd import ABCD
 from sklearn.metrics import classification_report
 from sklearn.neighbors import KNeighborsClassifier
-
+from sklearn.cluster import KMeans
+import pdb
 __author__ = 'WeiFu'
 
 
@@ -44,11 +45,11 @@ class Learners(object):
     predict_result = []
     predict_Y = []
     for predict_X, actual in zip(self.predict_X, self.predict_Y):
-      try:  
+      try:
         _predict_result = clf.predict(predict_X.reshape(1, -1))
         predict_result.append(_predict_result[0])
         predict_Y.append(actual)
-      except: 
+      except:
         print("one pass")
         continue
     self.scores = self._Abcd(predict_result, predict_Y, F)
@@ -84,15 +85,15 @@ class Learners(object):
       F[goal] = F.get(goal, []) + [round(2.0 * PREC * PD / (PD + PREC),3)]
       return F
 
-    def macro_cal(goal="Macro_F"):  
+    def macro_cal(goal="Macro_F"):
       PREC_sum, PD_sum = 0, 0
       for each in confusion_matrix_all_class:
         PD_sum += each.stats()[0]
-        PREC_sum += each.stats()[2]  
+        PREC_sum += each.stats()[2]
       PD_avg = PD_sum / len(uni_actual)
       PREC_avg = PREC_sum / len(uni_actual)
       F[goal] = F.get(goal, []) + [
-                round(2.0 * PREC_avg * PD_avg / (PREC_avg + PD_avg),3)]
+        round(2.0 * PREC_avg * PD_avg / (PREC_avg + PD_avg),3)]
       return F
 
     _goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC",
@@ -105,14 +106,15 @@ class Learners(object):
     if "Micro" in self.goal or "Macro" in self.goal:
       confusion_matrix_all_class = [each for each in abcd()]
       gate = confusion_matrix_all_class
-      print(gate[0].indx != "1" )
-      print(gate[1].indx != "3")
-      print(gate[2].indx != "2")
-      print(gate[0].indx != "4")
-      print(len(gate) == 4)
-      if len(gate) == 4 and (gate[0].indx != "1" and gate[1].indx != "3" and gate[2].indx != "2" and gate[0].indx != "4"): #changed 0 to 3
-          print("XX")
-          raise ValueError("confusion matrix has the wrong order of class")
+      #      print(gate[0].indx)
+      #      print(gate[1].indx)
+      #      print(gate[2].indx)
+      #      print(gate[3].indx)
+      #      print(len(gate) == 4)
+      #pdb.set_trace() # to trace
+      if len(gate) == 4 and (gate[0].indx != "4" and gate[1].indx != "3" and gate[2].indx != "1" and gate[3].indx != "2"): #changed 0 to 3
+        #print("XX")
+        raise ValueError("confusion matrix has the wrong order of class")
       if "Micro" in self.goal:
         return micro_cal()
       else:
@@ -134,18 +136,23 @@ class SK_SVM(Learners):
                                  goal) #Changed from SK_SVM to KNeighborsClassifier
 
   def get_param(self):
-#    tunelst = {"kernel": ["linear", "poly", "rbf", "sigmoid"],
-#               "C": [1, 50],
-#               "coef0": [0.0, 1],
-#               "gamma": [0.0, 1],
-#               "random_state": [1, 1]}
     tunelst = {"kernel": ["linear", "poly", "rbf", "sigmoid"],
-               "gamma": [0.0, 1]}
-    #print("X4")
-#    tunelst = {"n_neighbors": [2,3,4,5,6,7,8,9,10],
-#               "weights": ['uniform', 'distance']}
+               "C": [1, 50],
+               "coef0": [0.0, 1],
+               "gamma": [0.0, 1],
+               "random_state": [1, 1]}
     return tunelst
 
+class SK_KNN(Learners):
+  def __init__(self, train_x, train_y, predict_x, predict_y, goal):
+    clf = KNeighborsClassifier()
+    super(SK_KNN, self).__init__(clf, train_x, train_y, predict_x, predict_y,
+                                 goal)
+
+  def get_param(self):
+    tunelst = {"n_neighbors": [2,3,4,5,6,7,8,9,10],
+               "weights": ['uniform', 'distance']}
+    return tunelst
 
 if __name__ == "__main__":
   pass
