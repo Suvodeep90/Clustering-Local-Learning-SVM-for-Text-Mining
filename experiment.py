@@ -20,6 +20,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn import neighbors
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
+from sklearn.cluster import AffinityPropagation
 
 def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal, target_class=None):
   if not target_class:
@@ -109,23 +110,21 @@ def run_tuning_SVM(word2vec_src, repeats=1, fold=10, tuning=True):
   This is the baseline method.
   :return:None
   """
-@study
+#@study
 def run_SVM(word2vec_src, train_pd):
   print("# word2vec:", word2vec_src)
   clf = svm.SVC(kernel="rbf", gamma=0.005)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
+  print("Train data: " + str(train_pd.shape))
   if train_pd is None: train_pd = load_vec(data, data.train_data, use_pkl=False)
-  test_pd = load_vec(data, data.test_data, use_pkl=False)
   train_X = train_pd.loc[:, "Output"].tolist()
   train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
-  test_X = test_pd.loc[:, "Output"].tolist()
-  test_Y = test_pd.loc[:, "LinkTypeId"].tolist()
   clf.fit(train_X, train_Y)
-  results_SVM(clf, train_X, train_Y, test_X, test_Y)
+  return clf
 
 
-def results_SVM(clf, train_X, train_Y, test_X, test_Y):
+def results_SVM(clf, test_X, test_Y):
   predicted = clf.predict(test_X)
   # labels: ["Duplicates", "DirectLink","IndirectLink", "Isolated"]
   print(metrics.classification_report(test_Y, predicted, labels=["1", "2", "3", "4"], digits=3))
@@ -133,21 +132,34 @@ def results_SVM(clf, train_X, train_Y, test_X, test_Y):
   #print("accuracy  ", get_acc(cm))
 
 def run_kmeans(word2vec_src):
-  numClusters = 4
+  numClusters = 3
   print("# word2vec:", word2vec_src)
-  clf = KMeans(n_clusters=numClusters, init='k-means++', max_iter=100, n_init=1)
+  clf = KMeans(n_clusters=numClusters, init='k-means++', max_iter=200, n_init=1)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
   train_pd = load_vec(data, data.train_data, use_pkl=False)
+  test_pd = load_vec(data, data.test_data, use_pkl=False)
   train_X = train_pd.loc[:, "Output"].tolist()
   clf.fit(train_X)
 
+  svm_dict = {}
   data.train_data['clabel'] = clf.labels_
+  for l in range(numClusters):   
+    cluster = data.train_data.loc[data.train_data['clabel'] == l]
+    svm_dict[l] = run_SVM(word2vec_src, cluster)
+
+  test_X = test_pd.loc[:, "Output"].tolist()
+  predicted = clf.predict(test_X)
+  data.test_data['clabel'] = predicted
   for l in range(numClusters):
     print("Label " + str(l))
-    cluster = data.train_data.loc[data.train_data['clabel'] == l]
-    run_SVM(word2vec_src, cluster)
-  return clf
+    cluster = data.test_data.loc[data.test_data['clabel'] == l]
+    svm_model = svm_dict[l]
+    cluster_X = cluster.loc[:, "Output"].tolist()
+    cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+    results_SVM(svm_model, cluster_X, cluster_Y)
+  
+  #return clf
 
 # Not used, but wanted to put this code somewhere
 def results_kmeans(clf, train_X, train_Y, test_X, test_Y):
@@ -181,8 +193,8 @@ if __name__ == "__main__":
     myword2vecs = [os.path.join(word_src, i) for i in os.listdir(word_src)
                    if "syn" not in i]
     
-    print("\n########### Plain SVM ###########")
-    run_SVM(myword2vecs[x], None)
+    #print("\n########### Plain SVM ###########")
+    #run_SVM(myword2vecs[x], None)
     #run_tuning_SVM(myword2vecs[x])
     print("\n########### SVM with kmeans ###########")
     kmeans = run_kmeans(myword2vecs[x])
