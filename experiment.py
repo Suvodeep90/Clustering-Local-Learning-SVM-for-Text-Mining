@@ -118,7 +118,7 @@ def run_tuning_SVM(word2vec_src, repeats=1, fold=10, tuning=True):
   """
 #@study
 
-
+# returns the svm model
 def run_SVM(word2vec_src, train_pd):
   print("# word2vec:", word2vec_src)
   clf = svm.SVC(kernel="rbf", gamma=0.005)
@@ -132,13 +132,13 @@ def run_SVM(word2vec_src, train_pd):
   clf.fit(train_X, train_Y)
   return clf
 
-
+# parses and returns a given svm in the format of dictionary -
+# [class](precision, recall, f1score, support)
 def results_SVM(clf, test_X, test_Y):
   predicted = clf.predict(test_X)
   # labels: ["Duplicates", "DirectLink","IndirectLink", "Isolated"]
   report_gen = metrics.classification_report(
       test_Y, predicted, labels=["1", "2", "3", "4"], digits=3)
-
   parsed_report = parse_classification_report(report_gen)
   return parsed_report
  #cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
@@ -151,11 +151,30 @@ def total_summary(result_set):
   t_recall = 0
   t_f1_score = 0
   t_support = 0
-  t_class_dic = dict.fromkeys([1,2,3,4])  # defaults values are none in these class totals 
-  for keys,values in result_set.items():
-    print(keys) 
+  
+  # defaults values are none in these class totals 
+  for l in range(len(result_set)):
+      print(result_set[l]) 
+
+  t_class_dic = {}
+  for keys in (1, 2, 3, 4, 'avg'):
+        t_class_dic[keys] = [0, 0, 0, 0]
+        
+  ''' for keys in (1, 2, 3, 4, 'avg'):
+    for l in range(len(result_set)):
+     # have access to the one svm
+     for i in (1,2,3,4):
+        t_class_dic[keys][i] += result_set[l][keys][i]
+ '''
+  for keys, values in t_class_dic.items():
+    print("How am I looking")
+    print(keys)
     print(values)
-      # there has to be an efficient way to coressponding sums
+  
+    
+
+  
+    # there has to be an efficient way to coressponding sums
   
 def run_kmeans(word2vec_src):
 
@@ -173,24 +192,24 @@ def run_kmeans(word2vec_src):
                init='k-means++', max_iter=200, n_init=1)
   clf.fit(train_X)
 
-  svm_dict = {}  # maintain a list of svms
+  svm_models = []  # maintain a list of svms
   data.train_data['clabel'] = clf.labels_
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l]
-    svm_dict[l] = run_SVM(word2vec_src, cluster)
+    svm_models.append(run_SVM(word2vec_src, cluster))
 
 
-  svm_results = {} # maintain a list of svm results
+  svm_results = [] # maintain a list of svm results
   test_X = test_pd.loc[:, "Output"].tolist()
   predicted = clf.predict(test_X)
   data.test_data['clabel'] = predicted
   for l in range(numClusters):
-    print("Label " + str(l))
+    #print("Label " + str(l))
     cluster = data.test_data.loc[data.test_data['clabel'] == l]
-    svm_model = svm_dict[l]
+    svm_model = svm_models[l]
     cluster_X = cluster.loc[:, "Output"].tolist()
     cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
-    svm_results[l] = results_SVM(svm_model, cluster_X, cluster_Y) # store all the SVM result report in a dictionary
+    svm_results.append(results_SVM(svm_model, cluster_X, cluster_Y))# store all the SVM result report in a dictionary
 
     # call the helper method to summarize the svm results
   total_summary(svm_results)
