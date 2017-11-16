@@ -21,6 +21,7 @@ from sklearn import neighbors
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 from sklearn.cluster import AffinityPropagation
+import pandas as pd
 
 def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal, target_class=None):
   if not target_class:
@@ -132,14 +133,17 @@ def results_SVM(clf, test_X, test_Y):
   #print("accuracy  ", get_acc(cm))
 
 def run_kmeans(word2vec_src):
-  numClusters = 3
+
   print("# word2vec:", word2vec_src)
-  clf = KMeans(n_clusters=numClusters, init='k-means++', max_iter=200, n_init=1)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
   train_pd = load_vec(data, data.train_data, use_pkl=False)
   test_pd = load_vec(data, data.test_data, use_pkl=False)
   train_X = train_pd.loc[:, "Output"].tolist()
+
+  numClusters = optimalK(train_X)
+  print("Found optimal k: " + str(numClusters))
+  clf = KMeans(n_clusters=numClusters, init='k-means++', max_iter=200, n_init=1)
   clf.fit(train_X)
 
   svm_dict = {}
@@ -159,7 +163,53 @@ def run_kmeans(word2vec_src):
     cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
     results_SVM(svm_model, cluster_X, cluster_Y)
   
-  #return clf
+# Source: https://anaconda.org/milesgranger/gap-statistic/notebook
+def optimalK(data, nrefs=3, maxClusters=15):
+  """
+  Calculates KMeans optimal K using Gap Statistic from Tibshirani, Walther, Hastie
+  Params:
+      data: ndarry of shape (n_samples, n_features)
+      nrefs: number of sample reference datasets to create
+      maxClusters: Maximum number of clusters to test for
+  Returns: (gaps, optimalK)
+  """
+  gaps = np.zeros((len(range(1, maxClusters)),))
+  resultsdf = pd.DataFrame({'clusterCount':[], 'gap':[]})
+  for gap_index, k in enumerate(range(1, maxClusters)):
+
+    # Holder for reference dispersion results
+    refDisps = np.zeros(nrefs)
+
+      # For n references, generate random sample and perform kmeans getting resulting dispersion of each loop
+    for i in range(nrefs):
+            
+      # Create new random reference set
+      #randomReference = np.random.random_sample(size=data.shape)
+            
+      # Fit to it
+      km = KMeans(n_clusters=k, init='k-means++', max_iter=200, n_init=1)
+      km.fit(data)
+          
+      refDisp = km.inertia_
+      refDisps[i] = refDisp
+
+      # Fit cluster to original data and create dispersion
+      km = KMeans(k)
+      km.fit(data)
+      
+      origDisp = km.inertia_
+      #print(str(i+1) + ": " + str(origDisp))
+
+      # Calculate gap statistic
+      gap = np.log(np.mean(refDisps)) - np.log(origDisp)
+
+      # Assign this loop's gap statistic to gaps
+      gaps[gap_index] = gap
+      
+      resultsdf = resultsdf.append({'clusterCount':k, 'gap':gap}, ignore_index=True)
+
+  #return (gaps.argmax() + 1, resultsdf)  # Plus 1 because index of 0 means 1 cluster is optimal, index 2 = 3 clusters are optimal
+  return gaps.argmax()
 
 # Not used, but wanted to put this code somewhere
 def results_kmeans(clf, train_X, train_Y, test_X, test_Y):
