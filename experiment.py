@@ -144,37 +144,19 @@ def results_SVM(clf, test_X, test_Y):
  #cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
   #print("accuracy  ", get_acc(cm))
 
-def total_summary(result_set):
-  # have access to the all the parsed svm reports
-  # need to traverse through and keep tally
-  t_precision =0
-  t_recall = 0
-  t_f1_score = 0
-  t_support = 0
-  
-  # defaults values are none in these class totals 
-  for l in range(len(result_set)):
-      print(result_set[l]) 
+def total_summary(result_set, num_rows):
+  weightedAvgs = [0, 0, 0]
+  for l in result_set:
+    avg_list = l['avg']
+    for i in range(3):
+      support_count = avg_list[3]
+      weightedAvgs[i] += (avg_list[i] * support_count)/num_rows 
 
-  t_class_dic = {}
-  for keys in (1, 2, 3, 4, 'avg'):
-        t_class_dic[keys] = [0, 0, 0, 0]
-        
-  ''' for keys in (1, 2, 3, 4, 'avg'):
-    for l in range(len(result_set)):
-     # have access to the one svm
-     for i in (1,2,3,4):
-        t_class_dic[keys][i] += result_set[l][keys][i]
- '''
-  for keys, values in t_class_dic.items():
-    print("How am I looking")
-    print(keys)
-    print(values)
-  
-    
-
-  
-    # there has to be an efficient way to coressponding sums
+  result = {}
+  result['precision'] = weightedAvgs[0]
+  result['recall'] = weightedAvgs[1]
+  result['f1'] = weightedAvgs[2]
+  print(result)
   
 def run_kmeans(word2vec_src):
 
@@ -212,7 +194,7 @@ def run_kmeans(word2vec_src):
     svm_results.append(results_SVM(svm_model, cluster_X, cluster_Y))# store all the SVM result report in a dictionary
 
     # call the helper method to summarize the svm results
-  total_summary(svm_results)
+  total_summary(svm_results, test_pd.shape[0])
 
 # Source: https://anaconda.org/milesgranger/gap-statistic/notebook
 
@@ -266,8 +248,6 @@ def optimalK(data, nrefs=3, maxClusters=15):
   return gaps.argmax()
 
 # Not used, but wanted to put this code somewhere
-
-
 def results_kmeans(clf, train_X, train_Y, test_X, test_Y):
   predicted = clf.predict(test_X)
   print("Homogeneity: %0.3f" % metrics.homogeneity_score(train_Y, clf.labels_))
@@ -278,8 +258,6 @@ def results_kmeans(clf, train_X, train_Y, test_X, test_Y):
         % metrics.adjusted_rand_score(train_Y, clf.labels_))
   print("Silhouette Coefficient: %0.3f"
         % metrics.silhouette_score(train_X, clf.labels_, sample_size=1000))
-
-
 
 """
 Parse a sklearn classification report into a dict keyed by class name
@@ -350,7 +328,7 @@ if __name__ == "__main__":
                    if "syn" not in i]
     
     # print("\n########### Plain SVM ###########")
-    # run_SVM(myword2vecs[x], None)
+    # run_SVM(myword2vecs[x])
     # run_tuning_SVM(myword2vecs[x])
     print("\n########### SVM with kmeans ###########")
     kmeans = run_kmeans(myword2vecs[x])
