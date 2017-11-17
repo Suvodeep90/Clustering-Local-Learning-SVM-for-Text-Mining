@@ -132,9 +132,6 @@ class DE(object):
 
   def Tune(self):
     def isBetter(new, old):
-      print("Baby1")
-      print(new)
-      print(old)
       return new < old if self.goal == "PF" else new > old
 
     changed = False
@@ -147,8 +144,8 @@ class DE(object):
         new = self.update(index, f)
         newscore = self.get_target_score(self.evaluate_once(**new))
         self.evaluation += 1
-        print(newscore[self.target_class])
-        print(self.scores[index][self.target_class])
+        #print(newscore[self.target_class])
+        #print(self.scores[index][self.target_class])
         if isBetter(newscore[self.target_class],
                     self.scores[index][self.target_class]): 
           nextgeneration.append(new)
@@ -157,10 +154,9 @@ class DE(object):
           nextgeneration.append(f)
       self.frontier = nextgeneration[:]
       newbestconf, newbestscore = self.best()
-      print("Baby3")
-      print(newbestscore)
-      print(self.bestscore)
-      if isBetter(list(newbestscore.values()), list(self.bestscore.values())):  #Changed to compare values - Dict to list
+#      print(newbestscore)
+#      print(self.bestscore)
+      if isBetter(list(newbestscore.values()), list(self.bestscore.values())): 
         print("newbestscore %s:" % str(newbestscore))
         print("bestconf %s :" % str(newbestconf))
         self.bestscore = newbestscore

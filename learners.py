@@ -7,6 +7,7 @@ from sklearn.metrics import classification_report
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 import pdb
+from sklearn.lda import LDA
 __author__ = 'WeiFu'
 
 
@@ -38,8 +39,6 @@ class Learners(object):
     :param kwargs: a dict, all the parameters need to set after tuning.
     :return: F, scores.
     """
-    #print("X5")
-    #print(**kwargs)
     self.learner.set_params(**kwargs)
     clf = self.learner.fit(self.train_X, self.train_Y)
     predict_result = []
@@ -106,14 +105,9 @@ class Learners(object):
     if "Micro" in self.goal or "Macro" in self.goal:
       confusion_matrix_all_class = [each for each in abcd()]
       gate = confusion_matrix_all_class
-      #      print(gate[0].indx)
-      #      print(gate[1].indx)
-      #      print(gate[2].indx)
-      #      print(gate[3].indx)
-      #      print(len(gate) == 4)
       #pdb.set_trace() # to trace
-      if len(gate) == 4 and (gate[0].indx != "4" and gate[1].indx != "3" and gate[2].indx != "1" and gate[3].indx != "2"): #changed 0 to 3
-        #print("XX")
+      if len(gate) == 4 and (gate[0].indx != "4" and gate[1].indx != "3" and 
+            gate[2].indx != "1" and gate[3].indx != "2" and False): #changed 0 to 3
         raise ValueError("confusion matrix has the wrong order of class")
       if "Micro" in self.goal:
         return micro_cal()
@@ -130,10 +124,9 @@ class Learners(object):
 
 class SK_SVM(Learners):
   def __init__(self, train_x, train_y, predict_x, predict_y, goal):
-    #clf = KNeighborsClassifier() #changed from SVC() to KNeighborsClassifier()
     clf = SVC()
     super(SK_SVM, self).__init__(clf, train_x, train_y, predict_x, predict_y,
-                                 goal) #Changed from SK_SVM to KNeighborsClassifier
+                                 goal)
 
   def get_param(self):
     tunelst = {"kernel": ["linear", "poly", "rbf", "sigmoid"],
@@ -150,8 +143,21 @@ class SK_KNN(Learners):
                                  goal)
 
   def get_param(self):
-    tunelst = {"n_neighbors": [2,3,4,5,6,7,8,9,10],
+    tunelst = {"n_neighbors": [2,10],
                "weights": ['uniform', 'distance']}
+    return tunelst
+
+class SK_LDA(Learners):
+  def __init__(self, train_x, train_y, predict_x, predict_y, goal):
+    clf = LDA()
+    super(SK_LDA, self).__init__(clf, train_x, train_y, predict_x, predict_y,
+                                 goal)
+
+  def get_param(self):
+    tunelst = {"solver": ['svd','lsqr','eigen'],
+               "shrinkage": [None, 'auto'],
+               "n_components": [1,4],
+               "store_covariance": [True, False]}
     return tunelst
 
 if __name__ == "__main__":
