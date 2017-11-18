@@ -25,61 +25,11 @@ import pandas as pd
 import sys
 import collections
 
-
-def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal, target_class=None):
-  if not target_class:
-    target_class = goal
-  clf = learner(train_X, train_Y, tune_X, tune_Y, goal)
-  tuner = DE_Tune_ML(clf, clf.get_param(), goal, target_class)
-  return tuner.Tune()
-
-
-def load_vec(d, data, use_pkl=False, file_name=None):
-  if use_pkl:
-    if os.path.isfile(file_name):
-      with open(file_name, "rb") as my_pickle:
-        return pickle.load(my_pickle)
-  else:
-    # print("call get_document_vec")
-    return d.get_document_vec(data, file_name)
-
-
-def print_results(clfs):
-  file_name = time.strftime(os.path.sep.join([".", "results",
-                                              "%Y%m%d_%H:%M:%S.txt"]))
-  file_name = os.path.sep.join(["20171103.txt"])
-  content = ""
-  for each in clfs:
-    content += each.confusion
-  print(content)
-  with open(file_name, "w") as f:
-    f.write(content)
-  results_process.reports(file_name)
-
-
-def get_acc(cm):
-  out = []
-  for i in range(4):
-    out.append(cm[i][i] / 400)
-    print(cm)
-  return out
-
-
-"""
-  :param word2vec_src:str, path of word2vec model
-  :param repeats:int, number of repeats
-  :param fold: int,number of folds
-  :param tuning: boolean, tuning or not.
-  :return: None
-  """
-
-
-@study
-def run_tuning_SVM(word2vec_src, repeats=1, fold=10, tuning=True):
+def run_tuning_SVM(word2vec_src, train_pd, repeats=1, fold=10, tuning=True):
   print("# word2vec:", word2vec_src)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
-  train_pd = load_vec(data, data.train_data, file_name=False)
+  #train_pd = load_vec(data, data.train_data, file_name=False)
   test_pd = load_vec(data, data.test_data, file_name=False)
   learner = [SK_SVM][0]
   # learner = neighbors.KNeighborsClassifier(n_neighbors = 4)
@@ -111,14 +61,6 @@ def run_tuning_SVM(word2vec_src, repeats=1, fold=10, tuning=True):
   print_results(clfs)
 
 
-"""
-  Run SVM+word embedding experiment !
-  This is the baseline method.
-  :return:None
-  """
-#@study
-
-# returns the svm model
 def run_SVM(word2vec_src, train_pd):
   print("# word2vec:", word2vec_src)
   clf = svm.SVC(kernel="rbf", gamma=0.005)
@@ -132,7 +74,8 @@ def run_SVM(word2vec_src, train_pd):
   clf.fit(train_X, train_Y)
   return clf
 
-# parses and returns a given svm in the format of dictionary -
+
+# parses and returns the results of a given svm in the format of dictionary -
 # [class](precision, recall, f1score, support)
 def results_SVM(clf, test_X, test_Y):
   predicted = clf.predict(test_X)
@@ -144,6 +87,7 @@ def results_SVM(clf, test_X, test_Y):
  #cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
   #print("accuracy  ", get_acc(cm))
 
+
 def total_summary(result_set, num_rows):
   weightedAvgs = [0, 0, 0]
   for l in result_set:
@@ -151,15 +95,14 @@ def total_summary(result_set, num_rows):
     for i in range(3):
       support_count = avg_list[3]
       weightedAvgs[i] += (avg_list[i] * support_count)/num_rows 
-
   result = {}
   result['precision'] = weightedAvgs[0]
   result['recall'] = weightedAvgs[1]
   result['f1'] = weightedAvgs[2]
   print(result)
   
-def run_kmeans(word2vec_src):
 
+def run_kmeans(word2vec_src):
   print("# word2vec:", word2vec_src)
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
@@ -178,15 +121,13 @@ def run_kmeans(word2vec_src):
   data.train_data['clabel'] = clf.labels_
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l]
-    svm_models.append(run_SVM(word2vec_src, cluster))
-
+    svm_models.append(run_tuning_SVM(word2vec_src, cluster))
 
   svm_results = [] # maintain a list of svm results
   test_X = test_pd.loc[:, "Output"].tolist()
   predicted = clf.predict(test_X)
   data.test_data['clabel'] = predicted
   for l in range(numClusters):
-    #print("Label " + str(l))
     cluster = data.test_data.loc[data.test_data['clabel'] == l]
     svm_model = svm_models[l]
     cluster_X = cluster.loc[:, "Output"].tolist()
@@ -196,68 +137,31 @@ def run_kmeans(word2vec_src):
     # call the helper method to summarize the svm results
   total_summary(svm_results, test_pd.shape[0])
 
+
 # Source: https://anaconda.org/milesgranger/gap-statistic/notebook
-
-
 def optimalK(data, nrefs=3, maxClusters=15):
-  """
-  Calculates KMeans optimal K using Gap Statistic from Tibshirani, Walther, Hastie
-  Params:
-      data: ndarry of shape (n_samples, n_features)
-      nrefs: number of sample reference datasets to create
-      maxClusters: Maximum number of clusters to test for
-  Returns: (gaps, optimalK)
-  """
   gaps = np.zeros((len(range(1, maxClusters)),))
   resultsdf = pd.DataFrame({'clusterCount': [], 'gap': []})
   for gap_index, k in enumerate(range(1, maxClusters)):
-
-    # Holder for reference dispersion results
     refDisps = np.zeros(nrefs)
-
-      # For n references, generate random sample and perform kmeans getting resulting dispersion of each loop
     for i in range(nrefs):
-
-      # Create new random reference set
-      # randomReference = np.random.random_sample(size=data.shape)
-
-      # Fit to it
+      randomReference = np.random.random_sample(size=data.shape)
       km = KMeans(n_clusters=k, init='k-means++', max_iter=200, n_init=1)
       km.fit(data)
-
       refDisp = km.inertia_
       refDisps[i] = refDisp
-
-      # Fit cluster to original data and create dispersion
       km = KMeans(k)
       km.fit(data)
-
       origDisp = km.inertia_
-      # print(str(i+1) + ": " + str(origDisp))
-
-      # Calculate gap statistic
       gap = np.log(np.mean(refDisps)) - np.log(origDisp)
-
-      # Assign this loop's gap statistic to gaps
       gaps[gap_index] = gap
 
       resultsdf = resultsdf.append(
           {'clusterCount': k, 'gap': gap}, ignore_index=True)
 
   # return (gaps.argmax() + 1, resultsdf)  # Plus 1 because index of 0 means 1 cluster is optimal, index 2 = 3 clusters are optimal
-  return gaps.argmax()
+  return gaps.argmax() + 1
 
-# Not used, but wanted to put this code somewhere
-def results_kmeans(clf, train_X, train_Y, test_X, test_Y):
-  predicted = clf.predict(test_X)
-  print("Homogeneity: %0.3f" % metrics.homogeneity_score(train_Y, clf.labels_))
-  print("Completeness: %0.3f" %
-        metrics.completeness_score(train_Y, clf.labels_))
-  print("V-measure: %0.3f" % metrics.v_measure_score(train_Y, clf.labels_))
-  print("Adjusted Rand-Index: %.3f"
-        % metrics.adjusted_rand_score(train_Y, clf.labels_))
-  print("Silhouette Coefficient: %0.3f"
-        % metrics.silhouette_score(train_X, clf.labels_, sample_size=1000))
 
 """
 Parse a sklearn classification report into a dict keyed by class name
@@ -303,8 +207,41 @@ def parse_classification_report(clfreport):
     data['avg'] = parse_line(avg_line)[1:]  # average
     return data
 
+def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal, target_class=None):
+  if not target_class:
+    target_class = goal
+  clf = learner(train_X, train_Y, tune_X, tune_Y, goal)
+  tuner = DE_Tune_ML(clf, clf.get_param(), goal, target_class)
+  return tuner.Tune()
 
 
+def load_vec(d, data, use_pkl=False, file_name=None):
+  if use_pkl:
+    if os.path.isfile(file_name):
+      with open(file_name, "rb") as my_pickle:
+        return pickle.load(my_pickle)
+  else:
+    return d.get_document_vec(data, file_name)
+
+
+def print_results(clfs):
+  file_name = time.strftime(os.path.sep.join([".", "results", "%Y%m%d_%H:%M:%S.txt"]))
+  file_name = os.path.sep.join(["20171103.txt"])
+  content = ""
+  for each in clfs:
+    content += each.confusion
+  print(content)
+  with open(file_name, "w") as f:
+    f.write(content)
+  results_process.reports(file_name)
+
+
+def get_acc(cm):
+  out = []
+  for i in range(4):
+    out.append(cm[i][i] / 400)
+    print(cm)
+  return out
 
 def prepare_word2vec():
   print("Downloading pretrained word2vec models")
@@ -312,6 +249,8 @@ def prepare_word2vec():
   file_name = wget.download(url)
   with zipfile.ZipFile(file_name, "r") as zip_ref:
     zip_ref.extractall()
+
+
 
 ########################## MAIN ##########################
 if __name__ == "__main__":
