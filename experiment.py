@@ -1050,35 +1050,27 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
   learner = [SK_SVM][0]
   goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
           7: "Micro_F"}[6]
-  print(goal)
   F = {}
   clfs = []
   for i in range(repeats):  # repeat n times here
     kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
                          shuffle=True)
     for train_index, tune_index in kf:
-      print(train_pd)
       train_data = train_pd.ix[train_index]
-      print(train_index)
-      print(train_data)
       tune_data = train_pd.ix[tune_index]
       train_X = train_data.loc[:, "Output"].values
-      print(train_X)
       train_Y = train_data.loc[:, "LinkTypeId"].values
-      print(train_Y)
       tune_X = tune_data.loc[:, "Output"].values
       tune_Y = tune_data.loc[:, "LinkTypeId"].values
       test_X = test_pd.loc[:, "Output"].values
       test_Y = test_pd.loc[:, "LinkTypeId"].values
-      print("9999")
       params, evaluation = tune_learner(learner, train_X, train_Y, tune_X,
                                         tune_Y, goal) if tuning else ({}, 0)
-      print("0000")
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
-  queue.put(clfs)    
-  print_results(clfs)
+  queue.put(clfs)
+  return clfs
 
 # parses and returns a given svm in the format of dictionary -
 # [class](precision, recall, f1score, support)
@@ -1147,6 +1139,7 @@ def run_kmeans(word2vec_src):
   #b.wait()
   t.join()
   stop1 = timeit.default_timer()
+  print("Done all models - ", (stop1 - start0))
 
   svm_results = [] # maintain a list of svm results
   test_X = test_pd.loc[:, "Output"].tolist()
