@@ -437,9 +437,6 @@ if __name__ == "__main__":
     np.random.seed(x)
     myword2vecs = [os.path.join(word_src, i) for i in os.listdir(word_src)
                    if "syn" not in i]
-#    t = threading.Thread(target=run_tuning_SVM_KNN, args = [myword2vecs[x]])
-#    threads.append(t)
-#    t.start()
     run_kmeans(myword2vecs[x])
     #print("Run completed for baseline model--------------------------------------------------")
     #run_tuning_SVM(myword2vecs[x])

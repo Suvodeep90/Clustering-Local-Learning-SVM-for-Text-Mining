@@ -1006,7 +1006,6 @@ def run_SVM(word2vec_src, train_pd, queue):
 #      data, data.train_data, use_pkl=False)
   train_X = train_pd.loc[:, "Output"].tolist()
   train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
-  print(train_Y)
   start = timeit.default_timer()
   clf.fit(train_X, train_Y)
   stop = timeit.default_timer()
@@ -1070,10 +1069,8 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
       tune_Y = tune_data.loc[:, "LinkTypeId"].values
       test_X = test_pd.loc[:, "Output"].values
       test_Y = test_pd.loc[:, "LinkTypeId"].values
-      print("9999")
       params, evaluation = tune_learner(learner, train_X, train_Y, tune_X,
                                         tune_Y, goal) if tuning else ({}, 0)
-      print("0000")
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
@@ -1120,8 +1117,8 @@ def run_kmeans(word2vec_src):
   train_X = train_pd.loc[:, "Output"].tolist()
   queue = Queue()
 
-  #numClusters = optimalK(train_X)
-  numClusters = 5
+  numClusters = optimalK(train_X)
+  #numClusters = 5
   print("Found optimal k: " + str(numClusters))
   clf = KMeans(n_clusters=numClusters,
                init='k-means++', max_iter=200, n_init=1)
@@ -1139,7 +1136,7 @@ def run_kmeans(word2vec_src):
   #b = Barrier(numClusters-1)
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l] 
-    t = threading.Thread(target=run_tuning_SVM_C, args = [word2vec_src,cluster,queue])
+    t = threading.Thread(target=run_SVM, args = [word2vec_src,cluster,queue])
     threads.append(t)
     t.start()
     response = queue.get()
