@@ -63,22 +63,14 @@ class PaperData(object):
     data["RelatedPostIdVec"] = ""
     for column in ["RelatedPostId", "PostId"]: 
       rows = list(map(int, data[column].tolist())) #Changed to a list
-      #print("rows:")
-      #print(rows)
-      #print(self.sentences)
-      #print(self.sentences.iloc[[0,1],0])
       pd_posts = self.sentences.iloc[rows, 0]
       for index, post_sentences in enumerate(pd_posts.tolist()):  
         key_list = post_sentences.split(" ")
         x = np.array(
           [self.word2vec[i] for i in key_list if
            i in self.word2vec.vocab])  
-        #print("X data")
-        #print(x)
         word_count = len(x)
         word_vecs = np.sum(x, axis=0)
-        #print("Word_vecs")
-        #print(word_vecs)
         data.set_value(index, column + "Vec", word_vecs / word_count)
     data["Output"] = (data["PostIdVec"] + data["RelatedPostIdVec"]) / 2
     if file_name:

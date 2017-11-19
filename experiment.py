@@ -31,6 +31,7 @@ from sklearn.cluster import KMeans
 from sklearn.cluster import AffinityPropagation
 import collections
 from multiprocessing import Queue
+import pandas as pd
 
 def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal,
                  target_class=None):
@@ -96,6 +97,7 @@ def run_tuning_SVM(word2vec_src, repeats=1,
   word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
   data = PaperData(word2vec=word2vec_model)
   train_pd = load_vec(data, data.train_data, file_name=False)
+  print(train_pd)
   test_pd = load_vec(data, data.test_data, file_name=False)
   learner = [SK_SVM][0]
   goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
@@ -103,11 +105,15 @@ def run_tuning_SVM(word2vec_src, repeats=1,
   print(goal)
   F = {}
   clfs = []
+  start = timeit.default_timer()
   for i in range(repeats):  # repeat n times here
     kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
                          shuffle=True)
     for train_index, tune_index in kf:
+      print(train_pd)  
+      print(train_index)
       train_data = train_pd.ix[train_index]
+      print(train_data)
       tune_data = train_pd.ix[tune_index]
       train_X = train_data.loc[:, "Output"].values
       train_Y = train_data.loc[:, "LinkTypeId"].values
@@ -120,6 +126,8 @@ def run_tuning_SVM(word2vec_src, repeats=1,
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
+  stop = timeit.default_timer() 
+  print("Model training time: ", stop - start)         
   print_results(clfs)
 
 @study
@@ -143,6 +151,7 @@ def run_tuning_KNN(word2vec_src, repeats=1,
           7: "Micro_F"}[6]
   F = {}
   clfs = []
+  start = timeit.default_timer()
   for i in range(repeats):  # repeat n times here
     kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
                          shuffle=True)
@@ -160,6 +169,8 @@ def run_tuning_KNN(word2vec_src, repeats=1,
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
+  stop = timeit.default_timer() 
+  print("Model training time: ", stop - start)     
   print_results(clfs)
 
 
@@ -188,7 +199,9 @@ def run_tuning_LDA(word2vec_src, repeats=1,
     kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
                          shuffle=True)
     for train_index, tune_index in kf:
+      print(train_index)
       train_data = train_pd.ix[train_index]
+      print(train_data)
       tune_data = train_pd.ix[tune_index]
       train_X = train_data.loc[:, "Output"].values
       train_Y = train_data.loc[:, "LinkTypeId"].values
@@ -416,6 +429,11 @@ def run_SVM_KNN(word2vec_src):
   start = timeit.default_timer()
   clf.fit(train_X, train_Y)
   predicted = clf.predict(train_X)
+#  predicted = pd.DataFrame(predicted)
+#  train_X = pd.DataFrame(train_X)
+#  t = predicted.index[predicted.loc[1] == 1].tolist()
+#  print(predicted.axes)
+#  print(t)
   for i in range(len(predicted)):
       if predicted[i] == '1':
           classX1.append(train_X[i])
@@ -579,11 +597,6 @@ def run_SVM_KNN_thread(word2vec_src):
       t = threading.Thread(target= models[i].fit, args = [TrainingSamplesX[i],TrainingSamplesY[i]])
       threads.append(t)
       t.start()
-      #models[i].fit(TrainingSamplesX[i],TrainingSamplesY[i])
-#  clf2.fit(classX1,classY1)
-#  clf3.fit(classX2,classY2)
-#  clf4.fit(classX3,classY3)
-#  clf5.fit(classX4,classY4)
   stop1 = timeit.default_timer()
   predicted0 = clf.predict(test_X)
   for i in range(len(predicted0)):
@@ -729,10 +742,6 @@ def run_KNN_SVM(word2vec_src):
       t = threading.Thread(target= models[i].fit, args = [TrainingSamplesX[i],TrainingSamplesY[i]])
       threads.append(t)
       t.start()
-#  clf2.fit(classX1,classY1)
-#  clf3.fit(classX2,classY2)
-#  clf4.fit(classX3,classY3)
-#  clf5.fit(classX4,classY4)
   stop1 = timeit.default_timer()
   predicted0 = clf.predict(test_X)
   for i in range(len(predicted0)):
@@ -883,10 +892,6 @@ def run_KNN_KNN(word2vec_src):
       threads.append(t)
       t.start()
   stop1 = timeit.default_timer()
-#  clf2.fit(classX1,classY1)
-#  clf3.fit(classX2,classY2)
-#  clf4.fit(classX3,classY3)
-#  clf5.fit(classX4,classY4)
   predicted0 = clf.predict(test_X)
   for i in range(len(predicted0)):
       if predicted0[i] == '1':
@@ -993,8 +998,24 @@ def run_KMeans_Wpair(word2vec_src):
 #################Katie's Code +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # returns the svm model
 def run_SVM(word2vec_src, train_pd, queue):
-  print("# word2vec:", word2vec_src)
   clf = svm.SVC(kernel="rbf", gamma=0.005)
+#  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+#  data = PaperData(word2vec=word2vec_model)
+#  print("Train data: " + str(train_pd.shape))
+#  if train_pd is None: train_pd = load_vec(
+#      data, data.train_data, use_pkl=False)
+  train_X = train_pd.loc[:, "Output"].tolist()
+  train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
+  print(train_Y)
+  start = timeit.default_timer()
+  clf.fit(train_X, train_Y)
+  stop = timeit.default_timer()
+  print("SVM Model Train Time", (stop-start))
+  queue.put(clf)
+  return clf
+def run_KNN_clustering(word2vec_src, train_pd, queue):
+  print("# word2vec:", word2vec_src)
+  clf = neighbors.KNeighborsClassifier(n_neighbors = 10)
 #  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
 #  data = PaperData(word2vec=word2vec_model)
 #  print("Train data: " + str(train_pd.shape))
@@ -1008,6 +1029,56 @@ def run_SVM(word2vec_src, train_pd, queue):
   print("SVM Model Train Time", (stop-start))
   queue.put(clf)
   return clf
+
+@study
+def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
+                   fold=10,
+                   tuning=True):
+  """
+  :param word2vec_src:str, path of word2vec model
+  :param repeats:int, number of repeats
+  :param fold: int,number of folds
+  :param tuning: boolean, tuning or not.
+  :return: None
+  """
+  print("# word2vec:", word2vec_src)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd_c = train_pd_c.reset_index()
+  train_pd = train_pd_c
+  test_pd = load_vec(data, data.test_data, file_name=False)
+  learner = [SK_SVM][0]
+  goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
+          7: "Micro_F"}[6]
+  print(goal)
+  F = {}
+  clfs = []
+  for i in range(repeats):  # repeat n times here
+    kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
+                         shuffle=True)
+    for train_index, tune_index in kf:
+      print(train_pd)
+      train_data = train_pd.ix[train_index]
+      print(train_index)
+      print(train_data)
+      tune_data = train_pd.ix[tune_index]
+      train_X = train_data.loc[:, "Output"].values
+      print(train_X)
+      train_Y = train_data.loc[:, "LinkTypeId"].values
+      print(train_Y)
+      tune_X = tune_data.loc[:, "Output"].values
+      tune_Y = tune_data.loc[:, "LinkTypeId"].values
+      test_X = test_pd.loc[:, "Output"].values
+      test_Y = test_pd.loc[:, "LinkTypeId"].values
+      print("9999")
+      params, evaluation = tune_learner(learner, train_X, train_Y, tune_X,
+                                        tune_Y, goal) if tuning else ({}, 0)
+      print("0000")
+      clf = learner(train_X, train_Y, test_X, test_Y, goal)
+      F = clf.learn(F, **params)
+      clfs.append(clf)
+  queue.put(clfs)    
+  print_results(clfs)
 
 # parses and returns a given svm in the format of dictionary -
 # [class](precision, recall, f1score, support)
@@ -1065,17 +1136,15 @@ def run_kmeans(word2vec_src):
   s2 = timeit.default_timer()
   print("Inter - ", (s2-s1))
   start1 = timeit.default_timer()
-  b = Barrier(numClusters-1)
+  #b = Barrier(numClusters-1)
   for l in range(numClusters):
-    cluster = data.train_data.loc[data.train_data['clabel'] == l]   
-    t = threading.Thread(target=run_SVM, args = [word2vec_src,cluster,queue])
+    cluster = data.train_data.loc[data.train_data['clabel'] == l] 
+    t = threading.Thread(target=run_tuning_SVM_C, args = [word2vec_src,cluster,queue])
     threads.append(t)
     t.start()
     response = queue.get()
-    print(response)
     svm_models.append(response)
-    #svm_models.append(run_SVM(word2vec_src, cluster))
- # b.wait()
+  #b.wait()
   t.join()
   stop1 = timeit.default_timer()
 
