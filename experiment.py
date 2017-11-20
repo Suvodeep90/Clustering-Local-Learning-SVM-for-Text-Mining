@@ -184,8 +184,26 @@ def run_SVM(word2vec_src, train_pd, queue):
   queue.put(clfs)
   return clf
 
+def run_KNN(word2vec_src, train_pd, queue):
+  clf = neighbors.KNeighborsClassifier(n_neighbors = 5)
+  clfs = []
+#  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+#  data = PaperData(word2vec=word2vec_model)
+#  print("Train data: " + str(train_pd.shape))
+#  if train_pd is None: train_pd = load_vec(
+#      data, data.train_data, use_pkl=False)
+  train_X = train_pd.loc[:, "Output"].tolist()
+  train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
+  start = timeit.default_timer()
+  clf.fit(train_X, train_Y)
+  stop = timeit.default_timer()
+  print("SVM Model Train Time", (stop-start))
+  clfs.append(clf)
+  queue.put(clfs)
+  return clf
+
 @study
-def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
+def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=6,
                    fold=10,
                    tuning=True):
   """
@@ -227,7 +245,7 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
   return clfs
 
 @study
-def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=1,
+def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=6,
                    fold=10,
                    tuning=True):
   """
@@ -285,8 +303,24 @@ def results_SVM_C(predicted, test_Y):
   report_gen = metrics.classification_report(
       test_Y, predicted, labels=["1", "2", "3", "4"], digits=3)
   print(report_gen)
+  classifaction_report_csv(report_gen)
   parsed_report = parse_classification_report(report_gen)
   return parsed_report
+
+def classifaction_report_csv(report):
+  report_data = []
+  lines = report.split('\n')
+  for line in lines[2:-3]:
+      row = {}
+      row_data = line.split('     ')
+      row['class'] = row_data[2]
+      row['precision'] = float(row_data[3].strip())
+      row['recall'] = float(row_data[4])
+      row['f1_score'] = float(row_data[5])
+      row['support'] = float(row_data[6].strip())
+      report_data.append(row)
+  dataframe = pd.DataFrame.from_dict(report_data)
+  dataframe.to_csv('classification_report.csv',mode = 'a' ,index = False)
 
 def total_summary(result_set, num_rows, start0,start1,stop0,stop1):
   weightedAvgs = [0, 0, 0]
@@ -352,6 +386,8 @@ def run_kmeans(word2vec_src):
   data.test_data['clabel'] = predicted
   total_predicted = []
   total_cluster_Y = []
+  avg_predicted = []
+  avg_cluster_Y = []
 #  for l in range(numClusters):
 #    #print("Label " + str(l))
 #    cluster = data.test_data.loc[data.test_data['clabel'] == l]
@@ -359,20 +395,37 @@ def run_kmeans(word2vec_src):
 #    cluster_X = cluster.loc[:, "Output"].tolist()
 #    cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
 #    svm_results.append(results_SVM(svm_model, cluster_X, cluster_Y))# store all the SVM result report in a dictionary
-  for l in range(numClusters):
-    cluster = data.test_data.loc[data.test_data['clabel'] == l]
-    for i in range(len(svm_models[l])):
+#  for l in range(numClusters):
+#    cluster = data.test_data.loc[data.test_data['clabel'] == l]
+#    for i in range(len(svm_models[l])):
+#      svm_model = svm_models[l][i]
+#      cluster_X = cluster.loc[:, "Output"].tolist()
+#      cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+#      total_cluster_Y = np.append(total_cluster_Y,cluster_Y)
+#      if target_model == run_tuning_SVM_C or target_model == run_tuning_KNN_C:
+#          predicted_C = svm_model.learner.predict(cluster_X)
+#      else:
+#          predicted_C = svm_model.predict(cluster_X)
+#      total_predicted = np.append(total_predicted,predicted_C)
+#      svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
+  for i in range(len(svm_models[l])):
+    total_predicted = []
+    total_cluster_Y = []
+    for l in range(numClusters):
+      cluster = data.test_data.loc[data.test_data['clabel'] == l]
       svm_model = svm_models[l][i]
       cluster_X = cluster.loc[:, "Output"].tolist()
       cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
       total_cluster_Y = np.append(total_cluster_Y,cluster_Y)
-      if target_model == run_tuning_SVM_C:
+      avg_cluster_Y = np.append(avg_cluster_Y,cluster_Y)
+      if target_model == run_tuning_SVM_C or target_model == run_tuning_KNN_C:
           predicted_C = svm_model.learner.predict(cluster_X)
       else:
           predicted_C = svm_model.predict(cluster_X)
       total_predicted = np.append(total_predicted,predicted_C)
-      svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
-
+      avg_predicted = np.append(avg_predicted,predicted_C)
+    svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
+  svm_results.append(results_SVM_C(avg_predicted, avg_cluster_Y))
     # call the helper method to summarize the svm results
   total_summary(svm_results, test_pd.shape[0],start0,start1,stop0,stop1)
 
