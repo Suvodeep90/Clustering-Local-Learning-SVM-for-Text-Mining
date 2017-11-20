@@ -1136,7 +1136,7 @@ def run_kmeans(word2vec_src):
   #b = Barrier(numClusters-1)
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l] 
-    t = threading.Thread(target=run_SVM, args = [word2vec_src,cluster,queue])
+    t = threading.Thread(target=run_tuning_SVM_C, args = [word2vec_src,cluster,queue])
     threads.append(t)
     t.start()
     response = queue.get()

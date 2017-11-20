@@ -32,6 +32,7 @@ from sklearn.cluster import AffinityPropagation
 import collections
 from multiprocessing import Queue
 import pandas as pd
+import warnings
 
 def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal,
                  target_class=None):
@@ -167,6 +168,7 @@ def run_SVM_baseline(word2vec_src):
 # returns the svm model
 def run_SVM(word2vec_src, train_pd, queue):
   clf = svm.SVC(kernel="rbf", gamma=0.005)
+  clfs = []
 #  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
 #  data = PaperData(word2vec=word2vec_model)
 #  print("Train data: " + str(train_pd.shape))
@@ -174,12 +176,12 @@ def run_SVM(word2vec_src, train_pd, queue):
 #      data, data.train_data, use_pkl=False)
   train_X = train_pd.loc[:, "Output"].tolist()
   train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
-  print(train_Y)
   start = timeit.default_timer()
   clf.fit(train_X, train_Y)
   stop = timeit.default_timer()
   print("SVM Model Train Time", (stop-start))
-  queue.put(clf)
+  clfs.append(clf)
+  queue.put(clfs)
   return clf
 
 @study
@@ -224,6 +226,48 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
   queue.put(clfs)
   return clfs
 
+@study
+def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=1,
+                   fold=10,
+                   tuning=True):
+  """
+  :param word2vec_src:str, path of word2vec model
+  :param repeats:int, number of repeats
+  :param fold: int,number of folds
+  :param tuning: boolean, tuning or not.
+  :return: None
+  """
+  print("# word2vec:", word2vec_src)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd_c = train_pd_c.reset_index()
+  train_pd = train_pd_c
+  test_pd = load_vec(data, data.test_data, file_name=False)
+  learner = [SK_KNN][0]
+  goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
+          7: "Micro_F"}[6]
+  F = {}
+  clfs = []
+  for i in range(repeats):  # repeat n times here
+    kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
+                         shuffle=True)
+    for train_index, tune_index in kf:
+      train_data = train_pd.ix[train_index]
+      tune_data = train_pd.ix[tune_index]
+      train_X = train_data.loc[:, "Output"].values
+      train_Y = train_data.loc[:, "LinkTypeId"].values
+      tune_X = tune_data.loc[:, "Output"].values
+      tune_Y = tune_data.loc[:, "LinkTypeId"].values
+      test_X = test_pd.loc[:, "Output"].values
+      test_Y = test_pd.loc[:, "LinkTypeId"].values
+      params, evaluation = tune_learner(learner, train_X, train_Y, tune_X,
+                                        tune_Y, goal) if tuning else ({}, 0)
+      clf = learner(train_X, train_Y, test_X, test_Y, goal)
+      F = clf.learn(F, **params)
+      clfs.append(clf)
+  queue.put(clfs)
+  return clfs
+
 # parses and returns a given svm in the format of dictionary -
 # [class](precision, recall, f1score, support)
 def results_SVM(clf, test_X, test_Y):  
@@ -235,7 +279,14 @@ def results_SVM(clf, test_X, test_Y):
   return parsed_report
  #cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
   #print("accuracy  ", get_acc(cm)
-
+def results_SVM_C(predicted, test_Y):  
+  #predicted = clf.predict(test_X)
+  # labels: ["Duplicates", "DirectLink","IndirectLink", "Isolated"]
+  report_gen = metrics.classification_report(
+      test_Y, predicted, labels=["1", "2", "3", "4"], digits=3)
+  print(report_gen)
+  parsed_report = parse_classification_report(report_gen)
+  return parsed_report
 
 def total_summary(result_set, num_rows, start0,start1,stop0,stop1):
   weightedAvgs = [0, 0, 0]
@@ -281,9 +332,11 @@ def run_kmeans(word2vec_src):
   print("Inter - ", (s2-s1))
   start1 = timeit.default_timer()
   #b = Barrier(numClusters-1)
+  #Change the target here as this will be used result validation purpose
+  target_model = run_tuning_SVM_C
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l] 
-    t = threading.Thread(target=run_tuning_SVM_C, args = [word2vec_src,cluster,queue])
+    t = threading.Thread(target = run_tuning_SVM_C, args = [word2vec_src,cluster,queue])
     threads.append(t)
     t.start()
     response = queue.get()
@@ -297,13 +350,28 @@ def run_kmeans(word2vec_src):
   test_X = test_pd.loc[:, "Output"].tolist()
   predicted = clf.predict(test_X)
   data.test_data['clabel'] = predicted
+  total_predicted = []
+  total_cluster_Y = []
+#  for l in range(numClusters):
+#    #print("Label " + str(l))
+#    cluster = data.test_data.loc[data.test_data['clabel'] == l]
+#    svm_model = svm_models[l]
+#    cluster_X = cluster.loc[:, "Output"].tolist()
+#    cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+#    svm_results.append(results_SVM(svm_model, cluster_X, cluster_Y))# store all the SVM result report in a dictionary
   for l in range(numClusters):
-    #print("Label " + str(l))
     cluster = data.test_data.loc[data.test_data['clabel'] == l]
-    svm_model = svm_models[l]
-    cluster_X = cluster.loc[:, "Output"].tolist()
-    cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
-    svm_results.append(results_SVM(svm_model, cluster_X, cluster_Y))# store all the SVM result report in a dictionary
+    for i in range(len(svm_models[l])):
+      svm_model = svm_models[l][i]
+      cluster_X = cluster.loc[:, "Output"].tolist()
+      cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+      total_cluster_Y = np.append(total_cluster_Y,cluster_Y)
+      if target_model == run_tuning_SVM_C:
+          predicted_C = svm_model.learner.predict(cluster_X)
+      else:
+          predicted_C = svm_model.predict(cluster_X)
+      total_predicted = np.append(total_predicted,predicted_C)
+      svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
 
     # call the helper method to summarize the svm results
   total_summary(svm_results, test_pd.shape[0],start0,start1,stop0,stop1)
@@ -427,6 +495,7 @@ def prepare_word2vec():
 if __name__ == "__main__":
   word_src = "word2vecs_models"
   threads = []
+  warnings.filterwarnings("ignore")
   if not os.path.exists(word_src):
     prepare_word2vec()
   elif len(os.listdir(word_src)) == 0:
