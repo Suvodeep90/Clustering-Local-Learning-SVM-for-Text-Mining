@@ -421,7 +421,7 @@ def run_kmeans(word2vec_src):
   queue = Queue()
 
   start = timeit.default_timer()
-  numClusters = optimalK(train_X)
+  numClusters = optimalK(pd.DataFrame(train_X))
   stop = timeit.default_timer()
   #numClusters = 5
   print("Found optimal k: " + str(numClusters))
@@ -505,30 +505,30 @@ def optimalK(data, nrefs=3, maxClusters=15):
     for i in range(nrefs):
 
       # Create new random reference set
-      # randomReference = np.random.random_sample(size=data.shape)
+      randomReference = np.random.random_sample(size=data.shape)
 
       # Fit to it
       km = KMeans(n_clusters=k, init='k-means++', max_iter=200, n_init=1)
-      km.fit(data)
+      km.fit(randomReference)
 
       refDisp = km.inertia_
       refDisps[i] = refDisp
 
-      # Fit cluster to original data and create dispersion
-      km = KMeans(k)
-      km.fit(data)
+    # Fit cluster to original data and create dispersion
+    km = KMeans(k)
+    km.fit(data)
 
-      origDisp = km.inertia_
-      # print(str(i+1) + ": " + str(origDisp))
+    origDisp = km.inertia_
+  # print(str(i+1) + ": " + str(origDisp))
 
-      # Calculate gap statistic
-      gap = np.log(np.mean(refDisps)) - np.log(origDisp)
+  # Calculate gap statistic
+    gap = np.log(np.mean(refDisps)) - np.log(origDisp)
 
-      # Assign this loop's gap statistic to gaps
-      gaps[gap_index] = gap
+  # Assign this loop's gap statistic to gaps
+    gaps[gap_index] = gap
 
-      resultsdf = resultsdf.append(
-          {'clusterCount': k, 'gap': gap}, ignore_index=True)
+    resultsdf = resultsdf.append(
+      {'clusterCount': k, 'gap': gap}, ignore_index=True)
 
   # return (gaps.argmax() + 1, resultsdf)  # Plus 1 because index of 0 means 1 cluster is optimal, index 2 = 3 clusters are optimal
   return gaps.argmax()
@@ -607,15 +607,15 @@ if __name__ == "__main__":
   elif len(os.listdir(word_src)) == 0:
     os.rmdir(word_src)
     prepare_word2vec()
-  for x in range(10):
+  for x in range(1):
     random.seed(x)
     np.random.seed(x)
     myword2vecs = [os.path.join(word_src, i) for i in os.listdir(word_src)
                    if "syn" not in i]
     #run_kmeans(myword2vecs[x])
     #run_KNN_baseline(myword2vecs[x])
-    run_SVM_baseline(myword2vecs[x])
+    #run_SVM_baseline(myword2vecs[x])
     #print("Run completed for baseline model--------------------------------------------------")
-    #run_tuning_SVM(myword2vecs[x])
+    run_tuning_SVM(myword2vecs[x])
     #run_tuning_KNN(myword2vecs[x])
     #print("Run completed for DE model--------------------------------------------------")
