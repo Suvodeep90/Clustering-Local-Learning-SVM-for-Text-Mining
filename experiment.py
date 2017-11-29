@@ -253,7 +253,7 @@ def run_SVM_C(word2vec_src, train_pd, queue):
   queue.put(clfs)
   return clf
 
-def run_KNN_C(word2vec_src, train_pd, queue):
+def run_KNN_C(word2vec_src, train_pd, queue, l):
   clf = neighbors.KNeighborsClassifier(n_neighbors = 5)
   clfs = []
 #  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
@@ -266,13 +266,15 @@ def run_KNN_C(word2vec_src, train_pd, queue):
   start = timeit.default_timer()
   clf.fit(train_X, train_Y)
   stop = timeit.default_timer()
+  print("Th", l)
   print("KNN Model Train Time", (stop-start))
   clfs.append(clf)
+  clfs.append(l)
   queue.put(clfs)
   return clf
 
 @study
-def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
+def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=1,
                    fold=10,
                    tuning=True):
   """
@@ -282,12 +284,12 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
   :param tuning: boolean, tuning or not.
   :return: None
   """
-  print("# word2vec:", word2vec_src)
-  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
-  data = PaperData(word2vec=word2vec_model)
+  #print("# word2vec:", word2vec_src)
+  #word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  #data = PaperData(word2vec=word2vec_model)
   train_pd_c = train_pd_c.reset_index()
   train_pd = train_pd_c
-  test_pd = load_vec(data, data.test_data, file_name=False)
+  test_pd = test_pd_c
   learner = [SK_SVM][0]
   goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
           7: "Micro_F"}[6]
@@ -310,11 +312,12 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue, repeats=1,
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
+  clfs.append(l)    
   queue.put(clfs)
   return clfs
 
 @study
-def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=1,
+def run_tuning_KNN_C(word2vec_src,train_pd_c,queue,l,test_pd_c, repeats=1,
                    fold=10,
                    tuning=True):
   """
@@ -324,12 +327,12 @@ def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=1,
   :param tuning: boolean, tuning or not.
   :return: None
   """
-  print("# word2vec:", word2vec_src)
-  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
-  data = PaperData(word2vec=word2vec_model)
+  #print("# word2vec:", word2vec_src)
+  #word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  #data = PaperData(word2vec=word2vec_model)
   train_pd_c = train_pd_c.reset_index()
   train_pd = train_pd_c
-  test_pd = load_vec(data, data.test_data, file_name=False)
+  test_pd = test_pd_c
   learner = [SK_KNN][0]
   goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
           7: "Micro_F"}[6]
@@ -352,6 +355,7 @@ def run_tuning_KNN_C(word2vec_src,train_pd_c,queue, repeats=1,
       clf = learner(train_X, train_Y, test_X, test_Y, goal)
       F = clf.learn(F, **params)
       clfs.append(clf)
+  clfs.append(l)    
   queue.put(clfs)
   return clfs
 
@@ -438,18 +442,20 @@ def run_kmeans(word2vec_src):
   s2 = timeit.default_timer()
   print("Inter - ", (s2-s1))
   start1 = timeit.default_timer()
-  #b = Barrier(numClusters-1)
+  #b = Barrier(numClusters)
   #Change the target here as this will be used result validation purpose
-  target_model = run_KNN_C
+  target_model = run_tuning_KNN_C
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l] 
-    t = threading.Thread(target = run_KNN_C, args = [word2vec_src,cluster,queue])
+    print("Thread No", l)
+    t = threading.Thread(target = run_tuning_KNN_C, args = [word2vec_src,cluster,queue,l])
     threads.append(t)
     t.start()
     response = queue.get()
     svm_models.append(response)
   #b.wait()
-  t.join()
+  for thread in threads:
+      thread.join()
   stop1 = timeit.default_timer()
   print("Done all models - ", (stop1 - start0))
 
@@ -461,7 +467,160 @@ def run_kmeans(word2vec_src):
   total_cluster_Y = []
   avg_predicted = []
   avg_cluster_Y = []
-  for i in range(len(svm_models[l])):
+  for i in range(len(svm_models[l])-1):
+    total_predicted = []
+    total_cluster_Y = []
+    for l in range(numClusters):
+      cluster = data.test_data.loc[data.test_data['clabel'] == l]
+      svm_model = svm_models[l][i]
+      cluster_X = cluster.loc[:, "Output"].tolist()
+      cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+      total_cluster_Y = np.append(total_cluster_Y,cluster_Y)
+      avg_cluster_Y = np.append(avg_cluster_Y,cluster_Y)
+      if target_model == run_tuning_SVM_C or target_model == run_tuning_KNN_C:
+          predicted_C = svm_model.learner.predict(cluster_X)
+      else:
+          predicted_C = svm_model.predict(cluster_X)
+      total_predicted = np.append(total_predicted,predicted_C)
+      avg_predicted = np.append(avg_predicted,predicted_C)
+    svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
+  svm_results.append(results_SVM_C(avg_predicted, avg_cluster_Y))
+    # call the helper method to summarize the svm results
+  total_summary(svm_results, test_pd.shape[0],start0,start1,stop0,stop1,start,stop)   
+  
+def run_kmeans_m(word2vec_src):
+
+  print("# word2vec:", word2vec_src)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd = load_vec(data, data.train_data, use_pkl=False)
+  test_pd = load_vec(data, data.test_data, use_pkl=False)
+  train_X = train_pd.loc[:, "Output"].tolist()
+  queue = Queue()
+
+  start = timeit.default_timer()
+  numClusters = optimalK(pd.DataFrame(train_X))
+  stop = timeit.default_timer()
+  #numClusters = 5
+  print("Found optimal k: " + str(numClusters))
+  clf = KMeans(n_clusters=numClusters,
+               init='k-means++', max_iter=200, n_init=1)
+  
+  start0 = timeit.default_timer()
+  clf.fit(train_X)
+  stop0 = timeit.default_timer()
+
+  svm_models = []  # maintain a list of svms
+  s1 = timeit.default_timer()
+  data.train_data['clabel'] = clf.labels_
+  s2 = timeit.default_timer()
+  print("Inter - ", (s2-s1))
+  start1 = timeit.default_timer()
+  #Change the target here as this will be used result validation purpose
+  target_model = run_tuning_SVM_C
+  for l in range(numClusters):
+    cluster = data.train_data.loc[data.train_data['clabel'] == l] 
+    print("Thread No", l)
+    #result.append(pool.apply_async(run_KNN_C, args = (word2vec_src,cluster,queue,)))
+    t = threading.Thread(target = run_tuning_SVM_C, args = [word2vec_src,cluster,queue,l,test_pd])
+    threads.append(t)
+  for th in threads:
+      th.start()
+  for th in threads:
+      response = queue.get()
+      svm_models.append(response)
+  print(svm_models)     
+  svm_models = sorted(svm_models, key = lambda th: th[-1] )    
+  stop1 = timeit.default_timer()
+  print(svm_models)  
+  
+  svm_results = [] # maintain a list of svm results
+  test_X = test_pd.loc[:, "Output"].tolist()
+  predicted = clf.predict(test_X)
+  data.test_data['clabel'] = predicted
+  total_predicted = []
+  total_cluster_Y = []
+  avg_predicted = []
+  avg_cluster_Y = []
+  for i in range(len(svm_models[l])-1):
+    total_predicted = []
+    total_cluster_Y = []
+    for l in range(numClusters):
+      cluster = data.test_data.loc[data.test_data['clabel'] == l]
+      svm_model = svm_models[l][i]
+      cluster_X = cluster.loc[:, "Output"].tolist()
+      cluster_Y = cluster.loc[:, "LinkTypeId"].tolist()
+      total_cluster_Y = np.append(total_cluster_Y,cluster_Y)
+      avg_cluster_Y = np.append(avg_cluster_Y,cluster_Y)
+      if target_model == run_tuning_SVM_C or target_model == run_tuning_KNN_C:
+          predicted_C = svm_model.learner.predict(cluster_X)
+      else:
+          predicted_C = svm_model.predict(cluster_X)
+      total_predicted = np.append(total_predicted,predicted_C)
+      avg_predicted = np.append(avg_predicted,predicted_C)
+    svm_results.append(results_SVM_C(total_predicted, total_cluster_Y))# store all the SVM result report in a dictionary
+  svm_results.append(results_SVM_C(avg_predicted, avg_cluster_Y))
+    # call the helper method to summarize the svm results
+  total_summary(svm_results, test_pd.shape[0],start0,start1,stop0,stop1,start,stop)      
+
+
+def run_kmeans_mp(word2vec_src):
+
+  print("# word2vec:", word2vec_src)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd = load_vec(data, data.train_data, use_pkl=False)
+  test_pd = load_vec(data, data.test_data, use_pkl=False)
+  train_X = train_pd.loc[:, "Output"].tolist()
+  queue = Queue()
+  pool = multiprocessing.Pool()
+  processes = []
+
+  start = timeit.default_timer()
+  numClusters = optimalK(pd.DataFrame(train_X))
+  stop = timeit.default_timer()
+  #numClusters = 5
+  print("Found optimal k: " + str(numClusters))
+  clf = KMeans(n_clusters=numClusters,
+               init='k-means++', max_iter=200, n_init=1)
+  
+  start0 = timeit.default_timer()
+  clf.fit(train_X)
+  stop0 = timeit.default_timer()
+
+  svm_models = []  # maintain a list of svms
+  s1 = timeit.default_timer()
+  data.train_data['clabel'] = clf.labels_
+  s2 = timeit.default_timer()
+  print("Inter - ", (s2-s1))
+  start1 = timeit.default_timer()
+  #Change the target here as this will be used result validation purpose
+  target_model = run_tuning_KNN_C
+  for l in range(numClusters):
+    cluster = data.train_data.loc[data.train_data['clabel'] == l] 
+    print("Thread No", l)
+    process = multiprocessing.Process(target = run_tuning_KNN_C, args = (word2vec_src,cluster,queue,l,test_pd,))
+    #t = threading.Thread(target = run_tuning_SVM_C, args = [word2vec_src,cluster,queue,l,test_pd])
+    processes.append(process)
+  for pr in processes:
+      pr.start()
+  for pr in processes:
+      response = queue.get()
+      svm_models.append(response)
+  print(svm_models)     
+  svm_models = sorted(svm_models, key = lambda th: th[-1] )    
+  stop1 = timeit.default_timer()
+  print(svm_models)  
+  
+  svm_results = [] # maintain a list of svm results
+  test_X = test_pd.loc[:, "Output"].tolist()
+  predicted = clf.predict(test_X)
+  data.test_data['clabel'] = predicted
+  total_predicted = []
+  total_cluster_Y = []
+  avg_predicted = []
+  avg_cluster_Y = []
+  for i in range(len(svm_models[l])-1):
     total_predicted = []
     total_cluster_Y = []
     for l in range(numClusters):
@@ -481,11 +640,10 @@ def run_kmeans(word2vec_src):
   svm_results.append(results_SVM_C(avg_predicted, avg_cluster_Y))
     # call the helper method to summarize the svm results
   total_summary(svm_results, test_pd.shape[0],start0,start1,stop0,stop1,start,stop)
-
 # Source: https://anaconda.org/milesgranger/gap-statistic/notebook
 
 
-def optimalK(data, nrefs=3, maxClusters=15):
+def optimalK(data, nrefs=3, maxClusters=6):
   """
   Calculates KMeans optimal K using Gap Statistic from Tibshirani, Walther, Hastie
   Params:
@@ -612,10 +770,10 @@ if __name__ == "__main__":
     np.random.seed(x)
     myword2vecs = [os.path.join(word_src, i) for i in os.listdir(word_src)
                    if "syn" not in i]
-    #run_kmeans(myword2vecs[x])
+    run_kmeans_m(myword2vecs[x])
     #run_KNN_baseline(myword2vecs[x])
     #run_SVM_baseline(myword2vecs[x])
     #print("Run completed for baseline model--------------------------------------------------")
-    run_tuning_SVM(myword2vecs[x])
+    #run_tuning_SVM(myword2vecs[x])
     #run_tuning_KNN(myword2vecs[x])
     #print("Run completed for DE model--------------------------------------------------")
