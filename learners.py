@@ -107,7 +107,7 @@ class Learners(object):
       gate = confusion_matrix_all_class
       #pdb.set_trace() # to trace
       if len(gate) == 4 and (gate[0].indx != "4" and gate[1].indx != "3" and 
-            gate[2].indx != "1" and gate[3].indx != "2" and False): #changed 0 to 3
+            gate[2].indx != "1" and gate[3].indx != "2"): #changed 0 to 3
         raise ValueError("confusion matrix has the wrong order of class")
       if "Micro" in self.goal:
         return micro_cal()

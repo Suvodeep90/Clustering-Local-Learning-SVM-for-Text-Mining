@@ -8,7 +8,7 @@ from sklearn import svm
 from sklearn import metrics
 import gensim
 import random
-from learners import SK_SVM,SK_KNN,SK_LDA
+from learners import SK_SVM,SK_KNN
 from tuner import DE_Tune_ML
 from model import PaperData
 from utility import study
@@ -17,7 +17,6 @@ import numpy as np
 #import wget
 import zipfile
 from sklearn import neighbors
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn import metrics
 import threading
 from threading import Barrier
@@ -235,7 +234,7 @@ def run_KNN_baseline(word2vec_src):
 
 #################Katie's Code +++++++++++++++++++++++++++++++
 # returns the svm model
-def run_SVM_C(word2vec_src, train_pd, queue):
+def run_SVM_C(word2vec_src, train_pd, queue, l, test_pd_n):
   clf = svm.SVC(kernel="rbf", gamma=0.005)
   clfs = []
 #  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
@@ -250,10 +249,11 @@ def run_SVM_C(word2vec_src, train_pd, queue):
   stop = timeit.default_timer()
   print("SVM Model Train Time", (stop-start))
   clfs.append(clf)
+  clfs.append(l)
   queue.put(clfs)
   return clf
 
-def run_KNN_C(word2vec_src, train_pd, queue, l):
+def run_KNN_C(word2vec_src, train_pd, queue, l, test_pd_n):
   clf = neighbors.KNeighborsClassifier(n_neighbors = 5)
   clfs = []
 #  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
@@ -274,7 +274,7 @@ def run_KNN_C(word2vec_src, train_pd, queue, l):
   return clf
 
 @study
-def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=1,
+def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=10,
                    fold=10,
                    tuning=True):
   """
@@ -317,7 +317,7 @@ def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=1,
   return clfs
 
 @study
-def run_tuning_KNN_C(word2vec_src,train_pd_c,queue,l,test_pd_c, repeats=1,
+def run_tuning_KNN_C(word2vec_src,train_pd_c,queue,l,test_pd_c, repeats=10,
                    fold=10,
                    tuning=True):
   """
@@ -407,7 +407,7 @@ def total_summary(result_set, num_rows, start0,start1,stop0,stop1,start,stop):
   result['precision'] = weightedAvgs[0]
   result['recall'] = weightedAvgs[1]
   result['f1'] = weightedAvgs[2]
-  print(result)
+  #print(result)
   print("GAP statistics Time:", (stop - start))
   print("1st Model training time: ", (stop0 - start0))
   print("layer 2 Models training time: ", (stop1 - start1))
@@ -528,12 +528,9 @@ def run_kmeans_m(word2vec_src):
       th.start()
   for th in threads:
       response = queue.get()
-      svm_models.append(response)
-  print(svm_models)     
+      svm_models.append(response)    
   svm_models = sorted(svm_models, key = lambda th: th[-1] )    
-  stop1 = timeit.default_timer()
-  print(svm_models)  
-  
+  stop1 = timeit.default_timer()  
   svm_results = [] # maintain a list of svm results
   test_X = test_pd.loc[:, "Output"].tolist()
   predicted = clf.predict(test_X)
@@ -599,12 +596,12 @@ def run_kmeans_mp(word2vec_src):
   for l in range(numClusters):
     cluster = data.train_data.loc[data.train_data['clabel'] == l] 
     print("Thread No", l)
-    process = multiprocessing.Process(target = run_tuning_KNN_C, args = (word2vec_src,cluster,queue,l,test_pd,))
+    pool.apply_async(run_tuning_KNN_C, (word2vec_src,cluster,queue,l,test_pd,))
     #t = threading.Thread(target = run_tuning_SVM_C, args = [word2vec_src,cluster,queue,l,test_pd])
-    processes.append(process)
-  for pr in processes:
-      pr.start()
-  for pr in processes:
+
+#  for pr in processes:
+#      pr.start()
+  for pr in range(numClusters):
       response = queue.get()
       svm_models.append(response)
   print(svm_models)     
@@ -643,7 +640,7 @@ def run_kmeans_mp(word2vec_src):
 # Source: https://anaconda.org/milesgranger/gap-statistic/notebook
 
 
-def optimalK(data, nrefs=3, maxClusters=6):
+def optimalK(data, nrefs=3, maxClusters=15):
   """
   Calculates KMeans optimal K using Gap Statistic from Tibshirani, Walther, Hastie
   Params:

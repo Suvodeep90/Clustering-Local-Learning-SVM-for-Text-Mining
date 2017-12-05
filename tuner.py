@@ -136,7 +136,7 @@ class DE(object):
 
     changed = False
     for k in range(self.repeats):
-      print(time.strftime("%Y%m%d_%H:%M:%S"), "###","Now life is: " ,self.life)
+      #print(time.strftime("%Y%m%d_%H:%M:%S"), "###","Now life is: " ,self.life)
       if self.life <= 0:
         break
       nextgeneration = []
@@ -153,15 +153,15 @@ class DE(object):
       self.frontier = nextgeneration[:]
       newbestconf, newbestscore = self.best()
       if isBetter(list(newbestscore.values()), list(self.bestscore.values())): 
-        print("newbestscore %s:" % str(newbestscore))
-        print("bestconf %s :" % str(newbestconf))
+        #print("newbestscore %s:" % str(newbestscore))
+        #print("bestconf %s :" % str(newbestconf))
         self.bestscore = newbestscore
         self.bestconf = newbestconf
         changed = True
       if not changed:
         self.life -= 1
       changed = False
-    print("TUNING DONE !")
+    #print("TUNING DONE !")
     return (self.bestconf, self.evaluation)
 
 
