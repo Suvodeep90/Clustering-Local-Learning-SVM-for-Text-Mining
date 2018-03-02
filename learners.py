@@ -8,7 +8,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans
 import pdb
 from sklearn.lda import LDA
-__author__ = 'WeiFu'
+from sklearn.neural_network import MLPClassifier
+__author__ = 'Suvodeep'
 
 
 class Learners(object):
@@ -145,6 +146,22 @@ class SK_KNN(Learners):
   def get_param(self):
     tunelst = {"n_neighbors": [2,10],
                "weights": ['uniform', 'distance']}
+    return tunelst
+
+class SK_MLP(Learners):
+  def __init__(self, train_x, train_y, predict_x, predict_y, goal):
+    clf = MLPClassifier()
+    super(SK_MLP, self).__init__(clf, train_x, train_y, predict_x, predict_y,
+                                 goal)
+
+  def get_param(self):
+    tunelst = {"hidden_layer_sizes": [100,5000],
+               "activation": ['identity', 'logistic','tanh', 'relu'],
+               "solver": ['lbfgs','sgd','adam'],
+               "alpha": [0.0001,1],
+               "learning_rate": ['constant','invscaling','adaptive'],
+               "learning_rate_init": [0.001,1],
+               "max_iter": [200,25000]}
     return tunelst
 
 class SK_LDA(Learners):

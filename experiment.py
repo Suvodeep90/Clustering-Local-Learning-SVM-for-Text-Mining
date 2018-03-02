@@ -8,7 +8,7 @@ from sklearn import svm
 from sklearn import metrics
 import gensim
 import random
-from learners import SK_SVM,SK_KNN
+from learners import SK_SVM,SK_KNN,SK_MLP
 from tuner import DE_Tune_ML
 from model import PaperData
 from utility import study
@@ -32,6 +32,8 @@ import collections
 from multiprocessing import Queue
 import pandas as pd
 import warnings
+from sklearn.neural_network import MLPClassifier
+
 
 def tune_learner(learner, train_X, train_Y, tune_X, tune_Y, goal,
                  target_class=None):
@@ -101,6 +103,54 @@ def run_tuning_SVM(word2vec_src, repeats=3,
   print(train_pd)
   test_pd = load_vec(data, data.test_data, file_name=False)
   learner = [SK_SVM][0]
+  goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
+          7: "Micro_F"}[6]
+  print(goal)
+  F = {}
+  clfs = []
+  start = timeit.default_timer()
+  for i in range(repeats):  # repeat n times here
+    kf = StratifiedKFold(train_pd.loc[:, "LinkTypeId"].values, fold,
+                         shuffle=True)
+    for train_index, tune_index in kf:
+      print(train_pd)  
+      print(train_index)
+      train_data = train_pd.ix[train_index]
+      print(train_data)
+      tune_data = train_pd.ix[tune_index]
+      train_X = train_data.loc[:, "Output"].values
+      train_Y = train_data.loc[:, "LinkTypeId"].values
+      tune_X = tune_data.loc[:, "Output"].values
+      tune_Y = tune_data.loc[:, "LinkTypeId"].values
+      test_X = test_pd.loc[:, "Output"].values
+      test_Y = test_pd.loc[:, "LinkTypeId"].values
+      params, evaluation = tune_learner(learner, train_X, train_Y, tune_X,
+                                        tune_Y, goal) if tuning else ({}, 0)
+      clf = learner(train_X, train_Y, test_X, test_Y, goal)
+      F = clf.learn(F, **params)
+      clfs.append(clf)
+  stop = timeit.default_timer() 
+  print("Model training time: ", stop - start)         
+  print_results(clfs,stop,start)
+
+@study
+def run_tuning_MLP(word2vec_src, repeats=1,
+                   fold=2,
+                   tuning=True):
+  """
+  :param word2vec_src:str, path of word2vec model
+  :param repeats:int, number of repeats
+  :param fold: int,number of folds
+  :param tuning: boolean, tuning or not.
+  :return: None
+  """
+  print("# word2vec:", word2vec_src)
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd = load_vec(data, data.train_data, file_name=False)
+  print(train_pd)
+  test_pd = load_vec(data, data.test_data, file_name=False)
+  learner = [SK_MLP][0]
   goal = {0: "PD", 1: "PF", 2: "PREC", 3: "ACC", 4: "F", 5: "G", 6: "Macro_F",
           7: "Micro_F"}[6]
   print(goal)
@@ -232,6 +282,36 @@ def run_KNN_baseline(word2vec_src):
   print("accuracy  ", get_acc(cm))
   print("Model training time: ", stop - start)
 
+
+@study
+def run_MLP(word2vec_src): 
+  """
+  Run SVM+word embedding experiment !
+  This is the baseline method.
+  :return:None
+  """
+  # Create a subplot with 1 row and 2 columns
+  print("# word2vec:", word2vec_src)
+  clf = MLPClassifier()
+  word2vec_model = gensim.models.Word2Vec.load(word2vec_src)
+  data = PaperData(word2vec=word2vec_model)
+  train_pd = load_vec(data, data.train_data, use_pkl=False)
+  test_pd = load_vec(data, data.test_data, use_pkl=False)
+  train_X = train_pd.loc[:, "Output"].tolist()
+  train_Y = train_pd.loc[:, "LinkTypeId"].tolist()
+  test_X = test_pd.loc[:, "Output"].tolist()
+  test_Y = test_pd.loc[:, "LinkTypeId"].tolist()
+  start = timeit.default_timer()
+  clf.fit(train_X, train_Y)
+  stop = timeit.default_timer()
+  predicted = clf.predict(test_X)
+  print(metrics.classification_report(test_Y, predicted,
+                                      labels=["1", "2", "3", "4"],
+                                      digits=3))
+  cm=metrics.confusion_matrix(test_Y, predicted, labels=["1", "2", "3", "4"])
+  print("accuracy  ", get_acc(cm))
+  print("Model training time: ", stop - start)
+
 #################Katie's Code +++++++++++++++++++++++++++++++
 # returns the svm model
 def run_SVM_C(word2vec_src, train_pd, queue, l, test_pd_n):
@@ -274,8 +354,8 @@ def run_KNN_C(word2vec_src, train_pd, queue, l, test_pd_n):
   return clf
 
 @study
-def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=10,
-                   fold=10,
+def run_tuning_SVM_C(word2vec_src,train_pd_c,queue,l,test_pd_c,repeats=1,
+                   fold=2,
                    tuning=True):
   """
   :param word2vec_src:str, path of word2vec model
@@ -539,6 +619,7 @@ def run_kmeans_m(word2vec_src):
   total_cluster_Y = []
   avg_predicted = []
   avg_cluster_Y = []
+  print(len(svm_models[l])-1)
   for i in range(len(svm_models[l])-1):
     total_predicted = []
     total_cluster_Y = []
@@ -767,7 +848,8 @@ if __name__ == "__main__":
     np.random.seed(x)
     myword2vecs = [os.path.join(word_src, i) for i in os.listdir(word_src)
                    if "syn" not in i]
-    run_kmeans_m(myword2vecs[x])
+    #run_MLP(myword2vecs[x])
+    run_tuning_MLP(myword2vecs[x])
     #run_KNN_baseline(myword2vecs[x])
     #run_SVM_baseline(myword2vecs[x])
     #print("Run completed for baseline model--------------------------------------------------")
